@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClassView · Student</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --paper:#FBFAF6; --ink:#1E2A3A; --muted:#5B6A7E; --line:#D3D9E1; --accent:#F2B33D; --away:#E5484D; --ok:#3FB68B; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Atkinson Hyperlegible",system-ui,-apple-system,sans-serif;font-size:18px;line-height:1.5}
+  button{font:inherit;cursor:pointer;border-radius:12px;border:2px solid var(--ink);background:#fff;color:var(--ink);padding:.6rem 1rem}
+  button.primary{background:var(--ink);color:#fff;font-weight:700}
+  button[disabled]{opacity:.45;cursor:default}
+  button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  input,textarea{font:inherit;width:100%;border:2px solid var(--line);border-radius:12px;padding:.7rem .85rem;background:#fff;color:var(--ink)}
+  .hidden{display:none!important}
+  .wrap{max-width:760px;margin:0 auto;padding:1.25rem}
+
+  #join{min-height:100vh;display:flex;align-items:center}
+  #join form{width:100%;display:flex;flex-direction:column;gap:.9rem}
+  #join h1{margin:0 0 .25rem;font-size:2.2rem}
+  #codeIn{font-size:2rem;letter-spacing:.3em;text-transform:uppercase;text-align:center;font-weight:700}
+  .err{color:var(--away);font-weight:700;min-height:1.5em}
+
+  header{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding-bottom:.75rem;border-bottom:2px solid var(--line)}
+  header .who{font-weight:700}
+  header .cls{color:var(--muted)}
+  .dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:var(--ok);margin-right:.35rem}
+  .dot.off{background:var(--away)}
+
+  .banner{background:#FDE7E8;border:2px solid var(--away);border-radius:12px;padding:.75rem 1rem;margin-top:1rem;
+    display:flex;justify-content:space-between;align-items:center;gap:1rem}
+  .question{font-size:clamp(1.3rem,4vw,1.8rem);font-weight:700;line-height:1.3;margin:1.25rem 0 1rem;white-space:pre-wrap}
+  .wait{color:var(--muted);text-align:center;padding:3rem 1rem;border:2px dashed var(--line);border-radius:16px;margin-top:1.25rem}
+  #ansText{min-height:40vh;resize:vertical}
+  .choices{display:grid;gap:.6rem}
+  .choices button{display:flex;gap:.8rem;align-items:center;text-align:left;padding:.85rem 1rem;border-color:var(--line)}
+  .choices button b{font-size:1.4rem;width:2.2rem;height:2.2rem;border-radius:50%;display:grid;place-items:center;border:2px solid var(--ink);flex:none}
+  .choices button.on{border-color:var(--ink);background:var(--ink);color:#fff}
+  .choices button.on b{border-color:#fff}
+  .status{color:var(--muted);font-size:.9rem;margin-top:.5rem;min-height:1.4em}
+  .lock{background:#FFF3D1;border-radius:12px;padding:.6rem 1rem;margin-bottom:.75rem;font-weight:700}
+  .note{color:var(--muted);font-size:.85rem;margin-top:1.5rem}
+</style>
+</head>
+<body>
+
+<section id="join" class="wrap">
+  <form id="joinForm">
+    <h1>Join your class</h1>
+    <label for="codeIn">Class code</label>
+    <input id="codeIn" maxlength="4" autocomplete="off" autocapitalize="characters" required>
+    <label for="nameIn">Your name</label>
+    <input id="nameIn" maxlength="40" autocomplete="name" required>
+    <button id="joinBtn" class="primary" type="submit" disabled>Connecting…</button>
+    <div class="err" id="joinErr" role="alert"></div>
+  </form>
+</section>
+
+<section id="room" class="wrap hidden">
+  <header>
+    <div><span class="dot" id="netDot"></span><span class="who" id="whoText"></span></div>
+    <div class="cls" id="clsText"></div>
+  </header>
+
+  <div class="banner hidden" id="awayBanner" role="alert">
+    <span id="awayMsg"></span>
+    <button id="awayOk">OK</button>
+  </div>
+
+  <div id="waiting" class="wait">Waiting for your teacher to send a question…</div>
+
+  <div id="qArea" class="hidden">
+    <div class="question" id="qText"></div>
+    <div class="lock hidden" id="lockMsg">Answers are locked.</div>
+    <textarea id="ansText" class="hidden" placeholder="Type your answer here"></textarea>
+    <div id="choices" class="choices hidden"></div>
+    <div class="status" id="saveStatus" aria-live="polite"></div>
+  </div>
+
+  <p class="note">Your teacher sees your answer as you type. If you leave this page, your teacher sees that too.</p>
+</section>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getDatabase, ref, get, set, update, onValue, push, onDisconnect } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBarJLmYYOLdgBLuZZBCEFnlx5sbzhi8X4",
+  authDomain: "classviewmuids.firebaseapp.com",
+  databaseURL: "https://classviewmuids-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "classviewmuids",
+  storageBucket: "classviewmuids.firebasestorage.app",
+  messagingSenderId: "904191833061",
+  appId: "1:904191833061:web:f24f5d5d6f20a8116df50c"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+const $ = id => document.getElementById(id);
+let uid = null, code = null, me = null;
+let meta = {}, currentQ = null, question = null;
+let awayKey = null, saveTimer = null, unsubAnswer = null, joined = false;
+
+// Prefill
+const params = new URLSearchParams(location.search);
+$("codeIn").value = (params.get("code") || "").toUpperCase();
+$("nameIn").value = localStorage.getItem("classview_name") || "";
+
+onAuthStateChanged(auth, user => {
+  if (!user) return;
+  uid = user.uid;
+  $("joinBtn").disabled = false;
+  $("joinBtn").textContent = "Join";
+});
+signInAnonymously(auth).catch(err => {
+  $("joinErr").textContent = "Could not connect: " + err.message;
+});
+
+/* ---------- Join ---------- */
+$("joinForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const c = $("codeIn").value.trim().toUpperCase();
+  const name = $("nameIn").value.trim();
+  $("joinErr").textContent = "";
+  if (c.length !== 4) { $("joinErr").textContent = "The class code has 4 characters."; return; }
+  if (!name) { $("joinErr").textContent = "Type your name."; return; }
+  $("joinBtn").disabled = true;
+  try {
+    const s = await get(ref(db, `sessions/${c}/meta`));
+    if (!s.exists()) { $("joinErr").textContent = `No class found with code ${c}. Check the code on the board.`; return; }
+    code = c;
+    localStorage.setItem("classview_name", name);
+    me = ref(db, `sessions/${c}/students/${uid}`);
+    await update(me, { name, online: true, away: false, joinedAt: Date.now() });
+    enterRoom(name);
+  } catch (err) {
+    $("joinErr").textContent = "Could not join: " + err.message;
+  } finally {
+    $("joinBtn").disabled = false;
+  }
+});
+
+function enterRoom(name){
+  joined = true;
+  $("join").classList.add("hidden");
+  $("room").classList.remove("hidden");
+  $("whoText").textContent = name;
+  $("clsText").textContent = `Class ${code}`;
+
+  // Online status (re-set every time the connection comes back)
+  onValue(ref(db, ".info/connected"), s => {
+    const on = s.val() === true;
+    $("netDot").classList.toggle("off", !on);
+    if (on) {
+      onDisconnect(ref(db, `sessions/${code}/students/${uid}/online`)).set(false);
+      update(me, { online: true });
+    }
+  });
+
+  onValue(ref(db, `sessions/${code}/meta`), s => {
+    meta = s.val();
+    if (!meta) { showEnded(); return; }
+    const newQ = meta.currentQ || null;
+    const q = newQ ? (meta.questions || {})[newQ] : null;
+    if (newQ !== currentQ) { currentQ = newQ; question = q; showQuestion(); }
+    else { question = q; }
+    applyLock();
+  });
+}
+
+function showEnded(){
+  $("waiting").textContent = "This class has ended. You can close this page.";
+  $("waiting").classList.remove("hidden");
+  $("qArea").classList.add("hidden");
+}
+
+/* ---------- Question ---------- */
+function showQuestion(){
+  if (unsubAnswer) { unsubAnswer(); unsubAnswer = null; }
+  $("saveStatus").textContent = "";
+  if (!question) {
+    $("waiting").classList.remove("hidden");
+    $("qArea").classList.add("hidden");
+    return;
+  }
+  $("waiting").classList.add("hidden");
+  $("qArea").classList.remove("hidden");
+  $("qText").textContent = question.text;
+
+  const isMC = question.type === "mc";
+  $("ansText").classList.toggle("hidden", isMC);
+  $("choices").classList.toggle("hidden", !isMC);
+  $("ansText").value = "";
+
+  if (isMC) {
+    const opts = question.options || {};
+    $("choices").innerHTML = ["A","B","C","D"].map(k =>
+      `<button type="button" data-choice="${k}"><b>${k}</b><span></span></button>`).join("");
+    $("choices").querySelectorAll("button").forEach(b => {
+      b.querySelector("span").textContent = opts[b.dataset.choice] || "";
+    });
+  }
+
+  const qid = currentQ;
+  unsubAnswer = onValue(ref(db, `sessions/${code}/students/${uid}/answers/${qid}`), s => {
+    const a = s.val();
+    if (isMC) {
+      $("choices").querySelectorAll("button").forEach(b => b.classList.toggle("on", !!a && a.choice === b.dataset.choice));
+    } else if (!a) {
+      $("ansText").value = "";          // teacher cleared answers
+    } else if (document.activeElement !== $("ansText") && a.text !== $("ansText").value) {
+      $("ansText").value = a.text || ""; // restore after reload
+    }
+  });
+  applyLock();
+}
+
+function applyLock(){
+  const locked = !!(meta && meta.locked);
+  $("lockMsg").classList.toggle("hidden", !locked);
+  $("ansText").readOnly = locked;
+  $("choices").querySelectorAll("button").forEach(b => b.disabled = locked);
+}
+
+$("ansText").addEventListener("input", () => {
+  if (meta && meta.locked) return;
+  $("saveStatus").textContent = "Saving…";
+  clearTimeout(saveTimer);
+  const qid = currentQ, text = $("ansText").value;
+  saveTimer = setTimeout(() => {
+    set(ref(db, `sessions/${code}/students/${uid}/answers/${qid}`), { text, updatedAt: Date.now() })
+      .then(() => { $("saveStatus").textContent = "Saved"; })
+      .catch(err => { $("saveStatus").textContent = "Not saved: " + err.message; });
+  }, 350);
+});
+
+$("choices").addEventListener("click", e => {
+  const b = e.target.closest("button[data-choice]");
+  if (!b || (meta && meta.locked)) return;
+  set(ref(db, `sessions/${code}/students/${uid}/answers/${currentQ}`), { choice: b.dataset.choice, updatedAt: Date.now() })
+    .then(() => { $("saveStatus").textContent = `Saved: ${b.dataset.choice}`; })
+    .catch(err => { $("saveStatus").textContent = "Not saved: " + err.message; });
+});
+
+/* ---------- Away log ---------- */
+function leftPage(){
+  if (!joined || awayKey) return;
+  const r = push(ref(db, `sessions/${code}/students/${uid}/awayLog`));
+  awayKey = r.key;
+  set(r, { start: Date.now() });   // client time, so the log is right even if the network sleeps
+  update(me, { away: true });
+}
+function cameBack(){
+  if (!joined || !awayKey) return;
+  const key = awayKey; awayKey = null;
+  const now = Date.now();
+  set(ref(db, `sessions/${code}/students/${uid}/awayLog/${key}/end`), now);
+  update(me, { away: false, online: true });
+  $("awayMsg").textContent = `You left this page at ${new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}. Your teacher can see this.`;
+  $("awayBanner").classList.remove("hidden");
+}
+document.addEventListener("visibilitychange", () => { document.hidden ? leftPage() : cameBack(); });
+window.addEventListener("pagehide", leftPage);
+window.addEventListener("pageshow", () => { if (!document.hidden) cameBack(); });
+$("awayOk").onclick = () => $("awayBanner").classList.add("hidden");
+</script>
+</body>
+</html>

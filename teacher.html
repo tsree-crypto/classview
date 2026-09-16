@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClassView · Teacher</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{
+    --board:#1E2A3A; --panel:#273648; --line:#3A4C63; --chalk:#EEF2F6; --muted:#A9B6C6;
+    --accent:#F2B33D; --away:#E5484D; --ok:#3FB68B;
+    --p1:#FFF3B8; --p2:#D5F0E3; --p3:#DCE5FF; --p4:#F7DCE8; --p5:#FFE2C7; --p6:#E6DDFB;
+    --ink:#1E2A3A;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--board);color:var(--chalk);
+    font-family:"Atkinson Hyperlegible",system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.45}
+  button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);
+    background:var(--panel);color:var(--chalk);padding:.55rem .9rem}
+  button:hover{border-color:var(--muted)}
+  button:focus-visible,textarea:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  button.primary{background:var(--accent);color:var(--ink);border-color:var(--accent);font-weight:700}
+  button.danger{border-color:var(--away);color:#FFB3B5}
+  button[disabled]{opacity:.5;cursor:default}
+  textarea,input[type=text]{font:inherit;width:100%;background:#16202D;color:var(--chalk);
+    border:1px solid var(--line);border-radius:10px;padding:.6rem .75rem}
+  .hidden{display:none!important}
+  .muted{color:var(--muted)}
+
+  /* Start screen */
+  #start{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:2rem;text-align:center}
+  #start h1{font-size:clamp(2rem,6vw,3.25rem);margin:0;letter-spacing:-.01em}
+  #start p{max-width:34rem;margin:0}
+
+  /* Board */
+  #board{padding:1rem;max-width:1400px;margin:0 auto}
+  .top{display:grid;grid-template-columns:auto 1fr auto;gap:1rem;align-items:center;
+    background:var(--panel);border-radius:16px;padding:1rem 1.25rem}
+  .code{font-size:clamp(3rem,8vw,5.5rem);font-weight:700;letter-spacing:.18em;line-height:1;color:var(--accent)}
+  .join small{display:block;color:var(--muted)}
+  .join a{color:var(--chalk);word-break:break-all}
+  #qr{background:#fff;padding:6px;border-radius:8px;line-height:0}
+  #qr img,#qr canvas{width:96px;height:96px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0}
+  .toolbar .spacer{flex:1}
+  .count{align-self:center;color:var(--muted)}
+
+  .layout{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:1rem;align-items:start}
+  @media (max-width:820px){.layout{grid-template-columns:1fr}.top{grid-template-columns:1fr auto}.top .join{grid-column:1/-1}}
+
+  .composer{background:var(--panel);border-radius:16px;padding:1rem;display:flex;flex-direction:column;gap:.75rem}
+  .composer h2{font-size:1.05rem;margin:0}
+  .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{flex:1;border:0;border-radius:0;background:transparent}
+  .seg button.on{background:var(--chalk);color:var(--ink);font-weight:700}
+  .opt{display:flex;gap:.5rem;align-items:center}
+  .opt b{width:1.5rem;text-align:center}
+
+  .current{background:var(--chalk);color:var(--ink);border-radius:16px;padding:1rem 1.25rem;margin-bottom:1rem}
+  .current .qtext{font-size:clamp(1.25rem,2.6vw,1.9rem);font-weight:700;line-height:1.25;white-space:pre-wrap}
+  .current .state{font-size:.9rem;margin-top:.4rem;color:#4A5A70}
+  .locked-tag{display:inline-block;background:var(--away);color:#fff;border-radius:6px;padding:0 .4rem;margin-left:.4rem}
+
+  .bars{display:grid;gap:.4rem;margin-top:.75rem}
+  .bar{display:grid;grid-template-columns:1.5rem 1fr 3rem;gap:.5rem;align-items:center}
+  .bar .track{background:#D8DEE6;border-radius:6px;height:1.4rem;overflow:hidden}
+  .bar .fill{background:var(--ink);height:100%;transition:width .3s}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.75rem}
+  .card{color:var(--ink);border-radius:12px;padding:.7rem .8rem;min-height:130px;cursor:pointer;
+    display:flex;flex-direction:column;gap:.35rem;border:3px solid transparent;text-align:left}
+  .card .head{display:flex;justify-content:space-between;align-items:center;gap:.5rem;font-weight:700}
+  .card .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .card .ans{font-size:.95rem;white-space:pre-wrap;word-break:break-word;overflow:hidden;
+    display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical}
+  .card .ans.empty{color:#6B778A;font-style:italic}
+  .card .choice{font-size:2.2rem;font-weight:700;line-height:1}
+  .card .foot{margin-top:auto;font-size:.8rem;color:#4A5A70}
+  .card.away{border-color:var(--away);box-shadow:0 0 0 3px rgba(229,72,77,.35)}
+  .card.offline{opacity:.55}
+  .badge{font-size:.72rem;font-weight:700;border-radius:6px;padding:.1rem .4rem;white-space:nowrap}
+  .badge.away{background:var(--away);color:#fff}
+  .badge.off{background:#6B778A;color:#fff}
+  .badge.live{background:var(--ok);color:#fff}
+  .empty-state{border:2px dashed var(--line);border-radius:16px;padding:2rem;text-align:center;color:var(--muted)}
+
+  /* Spotlight */
+  dialog{border:0;border-radius:18px;padding:0;max-width:min(900px,94vw);width:100%;background:var(--chalk);color:var(--ink)}
+  dialog::backdrop{background:rgba(10,16,24,.7)}
+  .dlg{padding:1.25rem 1.5rem;display:flex;flex-direction:column;gap:.75rem}
+  .dlg h3{margin:0;font-size:1.6rem}
+  .dlg .big{font-size:clamp(1.2rem,2.4vw,1.7rem);white-space:pre-wrap;word-break:break-word;
+    background:#fff;border-radius:12px;padding:1rem;min-height:6rem;max-height:50vh;overflow:auto}
+  .dlg table{border-collapse:collapse;width:100%;font-size:.95rem}
+  .dlg td,.dlg th{text-align:left;padding:.3rem .5rem;border-bottom:1px solid #D0D7E0}
+  .dlg .row{display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap}
+  .dlg button{background:#fff;color:var(--ink);border-color:#C4CCD6}
+  .dlg button.danger{color:var(--away);border-color:var(--away)}
+  #toast{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--chalk);color:var(--ink);
+    padding:.6rem 1rem;border-radius:10px;font-weight:700;z-index:10}
+  @media (prefers-reduced-motion:reduce){.bar .fill{transition:none}}
+</style>
+</head>
+<body>
+
+<section id="start">
+  <h1>ClassView</h1>
+  <p class="muted">Start a class, show the code on the board, and watch answers come in as students type.</p>
+  <p id="startStatus" class="muted">Connecting…</p>
+  <div style="display:flex;gap:.75rem;flex-wrap:wrap;justify-content:center">
+    <button id="btnNew" class="primary" disabled>Start a new class</button>
+    <button id="btnResume" class="hidden"></button>
+  </div>
+</section>
+
+<section id="board" class="hidden">
+  <div class="top">
+    <div class="code" id="codeText">----</div>
+    <div class="join">
+      <small>Students open this link and type the code</small>
+      <a id="joinLink" href="#" target="_blank" rel="noopener"></a>
+    </div>
+    <div id="qr" title="Scan to join"></div>
+  </div>
+
+  <div class="toolbar">
+    <span class="count" id="countText">0 students</span>
+    <span class="spacer"></span>
+    <button id="btnLock">Lock answers</button>
+    <button id="btnClear">Clear answers</button>
+    <button id="btnExport">Export CSV</button>
+    <button id="btnEnd" class="danger">End class</button>
+  </div>
+
+  <div class="layout">
+    <aside class="composer">
+      <h2>Question</h2>
+      <div class="seg" role="group" aria-label="Question type">
+        <button id="tShort" class="on" aria-pressed="true">Short answer</button>
+        <button id="tMC" aria-pressed="false">Multiple choice</button>
+      </div>
+      <textarea id="qInput" rows="5" placeholder="Type your question here"></textarea>
+      <div id="mcOpts" class="hidden" style="display:flex;flex-direction:column;gap:.5rem">
+        <div class="opt"><b>A</b><input type="text" data-opt="A" placeholder="Option A (optional)"></div>
+        <div class="opt"><b>B</b><input type="text" data-opt="B" placeholder="Option B (optional)"></div>
+        <div class="opt"><b>C</b><input type="text" data-opt="C" placeholder="Option C (optional)"></div>
+        <div class="opt"><b>D</b><input type="text" data-opt="D" placeholder="Option D (optional)"></div>
+        <small class="muted">Leave options empty if the choices are on the board or in the book.</small>
+      </div>
+      <button id="btnSend" class="primary">Send question</button>
+      <small class="muted">Sending a new question starts a fresh set of answers. Old answers are kept for export.</small>
+    </aside>
+
+    <main>
+      <div class="current" id="current">
+        <div class="qtext" id="curText">No question yet. Type one on the left and send it.</div>
+        <div class="state" id="curState"></div>
+        <div class="bars hidden" id="bars"></div>
+      </div>
+      <div class="grid" id="grid"></div>
+      <div class="empty-state" id="emptyGrid">Waiting for students to join…</div>
+    </main>
+  </div>
+</section>
+
+<dialog id="spot">
+  <div class="dlg">
+    <h3 id="spName"></h3>
+    <div id="spStatus"></div>
+    <div class="big" id="spAnswer"></div>
+    <div>
+      <b>Away log</b>
+      <table><thead><tr><th>Left page</th><th>Came back</th><th>Time away</th></tr></thead>
+      <tbody id="spLog"></tbody></table>
+    </div>
+    <div class="row">
+      <button id="spRemove" class="danger">Remove student</button>
+      <button id="spClose">Close</button>
+    </div>
+  </div>
+</dialog>
+
+<div id="toast" class="hidden"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getDatabase, ref, get, set, update, onValue, push } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBarJLmYYOLdgBLuZZBCEFnlx5sbzhi8X4",
+  authDomain: "classviewmuids.firebaseapp.com",
+  databaseURL: "https://classviewmuids-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "classviewmuids",
+  storageBucket: "classviewmuids.firebasestorage.app",
+  messagingSenderId: "904191833061",
+  appId: "1:904191833061:web:f24f5d5d6f20a8116df50c"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+const $ = id => document.getElementById(id);
+const PASTELS = ["--p1","--p2","--p3","--p4","--p5","--p6"];
+const LETTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const SAVE_KEY = "classview_teacher_code";
+
+let uid = null, code = null, meta = {}, students = {}, qType = "short";
+let unsubMeta = null, unsubStudents = null, spotUid = null;
+
+function toast(msg){
+  const t = $("toast"); t.textContent = msg; t.classList.remove("hidden");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.add("hidden"), 2500);
+}
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function hash(s){ let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
+function fmtTime(ms){ return ms ? new Date(ms).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"}) : "—"; }
+function fmtDur(sec){ sec = Math.max(0, Math.round(sec)); return sec < 60 ? `${sec}s` : `${Math.floor(sec/60)}m ${sec%60}s`; }
+function awayEntries(st){ return Object.values(st.awayLog || {}).sort((a,b) => (a.start||0) - (b.start||0)); }
+function awayTotal(st){ return awayEntries(st).reduce((s,e) => s + ((e.end || Date.now()) - (e.start || Date.now())) / 1000, 0); }
+
+/* ---------- Sign in ---------- */
+onAuthStateChanged(auth, user => {
+  if (!user) return;
+  uid = user.uid;
+  $("startStatus").textContent = "Ready.";
+  $("btnNew").disabled = false;
+  const saved = localStorage.getItem(SAVE_KEY);
+  if (saved) {
+    get(ref(db, `sessions/${saved}/meta/owner`)).then(s => {
+      if (s.val() === uid) {
+        const b = $("btnResume");
+        b.textContent = `Resume class ${saved}`;
+        b.classList.remove("hidden");
+        b.onclick = () => openBoard(saved);
+      }
+    }).catch(() => {});
+  }
+});
+signInAnonymously(auth).catch(err => {
+  $("startStatus").textContent = "Could not connect: " + err.message;
+});
+
+/* ---------- Create / open class ---------- */
+$("btnNew").onclick = async () => {
+  $("btnNew").disabled = true;
+  try {
+    for (let i = 0; i < 10; i++) {
+      const c = Array.from({length:4}, () => LETTERS[Math.floor(Math.random()*LETTERS.length)]).join("");
+      const s = await get(ref(db, `sessions/${c}/meta`));
+      if (s.exists()) continue;
+      await set(ref(db, `sessions/${c}/meta`), { owner: uid, createdAt: Date.now(), locked: false, currentQ: "" });
+      localStorage.setItem(SAVE_KEY, c);
+      openBoard(c);
+      return;
+    }
+    toast("Could not make a class code. Try again.");
+  } catch (e) {
+    toast("Error: " + e.message);
+  } finally {
+    $("btnNew").disabled = false;
+  }
+};
+
+function openBoard(c){
+  code = c;
+  $("start").classList.add("hidden");
+  $("board").classList.remove("hidden");
+  $("codeText").textContent = c;
+  const url = new URL("student.html", location.href);
+  url.searchParams.set("code", c);
+  $("joinLink").textContent = url.href.replace(/^https?:\/\//, "");
+  $("joinLink").href = url.href;
+  $("qr").innerHTML = "";
+  if (window.QRCode) new QRCode($("qr"), { text: url.href, width: 192, height: 192 });
+  else $("qr").classList.add("hidden");
+
+  unsubMeta = onValue(ref(db, `sessions/${c}/meta`), s => { meta = s.val() || {}; renderAll(); });
+  unsubStudents = onValue(ref(db, `sessions/${c}/students`), s => { students = s.val() || {}; renderAll(); });
+}
+
+/* ---------- Composer ---------- */
+function setType(t){
+  qType = t;
+  $("tShort").classList.toggle("on", t === "short"); $("tShort").setAttribute("aria-pressed", t === "short");
+  $("tMC").classList.toggle("on", t === "mc");       $("tMC").setAttribute("aria-pressed", t === "mc");
+  $("mcOpts").classList.toggle("hidden", t !== "mc");
+}
+$("tShort").onclick = () => setType("short");
+$("tMC").onclick = () => setType("mc");
+
+$("btnSend").onclick = async () => {
+  const text = $("qInput").value.trim();
+  if (!text) { toast("Type a question first."); return; }
+  const options = {};
+  document.querySelectorAll("[data-opt]").forEach(i => { options[i.dataset.opt] = i.value.trim(); });
+  const qRef = push(ref(db, `sessions/${code}/meta/questions`));
+  try {
+    await set(qRef, { text, type: qType, options: qType === "mc" ? options : null, createdAt: Date.now() });
+    await update(ref(db, `sessions/${code}/meta`), { currentQ: qRef.key, locked: false });
+    toast("Question sent.");
+  } catch (e) { toast("Error: " + e.message); }
+};
+
+/* ---------- Toolbar ---------- */
+$("btnLock").onclick = () => update(ref(db, `sessions/${code}/meta`), { locked: !meta.locked });
+
+$("btnClear").onclick = async () => {
+  if (!meta.currentQ) return;
+  if (!confirm("Clear all answers for the current question?")) return;
+  await Promise.all(Object.keys(students).map(u => set(ref(db, `sessions/${code}/students/${u}/answers/${meta.currentQ}`), null)));
+  toast("Answers cleared.");
+};
+
+$("btnExport").onclick = () => {
+  const qs = Object.entries(meta.questions || {}).sort((a,b) => (a[1].createdAt||0) - (b[1].createdAt||0));
+  const rows = [["Student","Question #","Question","Answer","Times away (whole class)","Total time away (s)"]];
+  const list = Object.values(students).sort((a,b) => (a.name||"").localeCompare(b.name||""));
+  for (const st of list) {
+    const awayN = awayEntries(st).length, awayS = Math.round(awayTotal(st));
+    if (!qs.length) rows.push([st.name, "", "", "", awayN, awayS]);
+    qs.forEach(([qid, q], i) => {
+      const a = (st.answers || {})[qid] || {};
+      const ans = q.type === "mc" ? (a.choice || "") : (a.text || "");
+      rows.push([st.name, i + 1, q.text, ans, awayN, awayS]);
+    });
+  }
+  const csv = rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g,'""')}"`).join(",")).join("\r\n");
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `ClassView_${code}_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+
+$("btnEnd").onclick = async () => {
+  if (!confirm("End this class and delete all its answers? Export the CSV first if you need it.")) return;
+  try {
+    await Promise.all(Object.keys(students).map(u => set(ref(db, `sessions/${code}/students/${u}`), null)));
+    await set(ref(db, `sessions/${code}/meta`), null);
+  } catch (e) { toast("Error: " + e.message); }
+  if (unsubMeta) unsubMeta();
+  if (unsubStudents) unsubStudents();
+  localStorage.removeItem(SAVE_KEY);
+  location.reload();
+};
+
+/* ---------- Rendering ---------- */
+function renderAll(){
+  const q = meta.currentQ ? (meta.questions || {})[meta.currentQ] : null;
+  const list = Object.entries(students).sort((a,b) => (a[1].name||"").localeCompare(b[1].name||""));
+  const online = list.filter(([,s]) => s.online).length;
+  const awayNow = list.filter(([,s]) => s.online && s.away).length;
+  $("countText").textContent = `${list.length} joined · ${online} online` + (awayNow ? ` · ${awayNow} away now` : "");
+  $("btnLock").textContent = meta.locked ? "Unlock answers" : "Lock answers";
+
+  // Current question
+  if (q) {
+    $("curText").textContent = q.text;
+    const answered = list.filter(([,s]) => { const a = (s.answers||{})[meta.currentQ]; return a && (a.text || a.choice); }).length;
+    $("curState").innerHTML = `${q.type === "mc" ? "Multiple choice" : "Short answer"} · ${answered} of ${list.length} answered` +
+      (meta.locked ? '<span class="locked-tag">Locked</span>' : "");
+  } else {
+    $("curText").textContent = "No question yet. Type one on the left and send it.";
+    $("curState").textContent = "";
+  }
+
+  // Bar chart for multiple choice
+  const bars = $("bars");
+  if (q && q.type === "mc") {
+    const counts = {A:0,B:0,C:0,D:0}; let total = 0;
+    list.forEach(([,s]) => { const c = ((s.answers||{})[meta.currentQ]||{}).choice; if (counts[c] !== undefined) { counts[c]++; total++; } });
+    bars.innerHTML = Object.entries(counts).map(([k,n]) => {
+      const label = q.options && q.options[k] ? ` ${esc(q.options[k])}` : "";
+      const pct = total ? Math.round(n / total * 100) : 0;
+      return `<div class="bar" title="${k}${label}"><b>${k}</b><div class="track"><div class="fill" style="width:${pct}%"></div></div><span>${n}</span></div>`;
+    }).join("");
+    bars.classList.remove("hidden");
+  } else bars.classList.add("hidden");
+
+  // Student cards
+  $("emptyGrid").classList.toggle("hidden", list.length > 0);
+  $("grid").innerHTML = list.map(([u, s]) => {
+    const a = q ? ((s.answers||{})[meta.currentQ] || {}) : {};
+    let body;
+    if (!q) body = `<div class="ans empty">Waiting for a question</div>`;
+    else if (q.type === "mc") body = a.choice ? `<div class="choice">${esc(a.choice)}</div>` : `<div class="ans empty">No choice yet</div>`;
+    else body = a.text ? `<div class="ans">${esc(a.text)}</div>` : `<div class="ans empty">Not started</div>`;
+    const n = awayEntries(s).length;
+    let badge = `<span class="badge live">Here</span>`, cls = "";
+    if (!s.online) { badge = `<span class="badge off">Offline</span>`; cls = "offline"; }
+    else if (s.away) { badge = `<span class="badge away">Away</span>`; cls = "away"; }
+    return `<button class="card ${cls}" data-uid="${esc(u)}" style="background:var(${PASTELS[hash(u) % PASTELS.length]})">
+      <div class="head"><span class="name">${esc(s.name || "?")}</span>${badge}</div>
+      ${body}
+      <div class="foot">${n ? `Left page ${n}× · ${fmtDur(awayTotal(s))} total` : "Stayed on page"}</div>
+    </button>`;
+  }).join("");
+
+  if (spotUid) renderSpot();
+}
+
+$("grid").addEventListener("click", e => {
+  const card = e.target.closest(".card");
+  if (!card) return;
+  spotUid = card.dataset.uid;
+  renderSpot();
+  $("spot").showModal();
+});
+
+function renderSpot(){
+  const s = students[spotUid];
+  if (!s) { $("spot").close(); spotUid = null; return; }
+  const q = meta.currentQ ? (meta.questions || {})[meta.currentQ] : null;
+  const a = q ? ((s.answers||{})[meta.currentQ] || {}) : {};
+  $("spName").textContent = s.name || "?";
+  $("spStatus").textContent = !s.online ? "Offline" : s.away ? "Away from the page right now" : "On the page";
+  $("spAnswer").textContent = !q ? "No question yet." : (q.type === "mc" ? (a.choice || "No choice yet") : (a.text || "Not started"));
+  const log = awayEntries(s);
+  $("spLog").innerHTML = log.length ? log.map(e =>
+    `<tr><td>${fmtTime(e.start)}</td><td>${e.end ? fmtTime(e.end) : "Still away"}</td><td>${fmtDur(((e.end||Date.now()) - e.start)/1000)}</td></tr>`
+  ).join("") : `<tr><td colspan="3">No time away.</td></tr>`;
+}
+
+$("spClose").onclick = () => { $("spot").close(); };
+$("spot").addEventListener("close", () => { spotUid = null; });
+$("spRemove").onclick = async () => {
+  if (!spotUid || !confirm("Remove this student and their answers?")) return;
+  await set(ref(db, `sessions/${code}/students/${spotUid}`), null);
+  $("spot").close();
+};
+
+// Refresh "time away" numbers while someone is away
+setInterval(() => { if (code && Object.values(students).some(s => s.away)) renderAll(); }, 5000);
+</script>
+</body>
+</html>
